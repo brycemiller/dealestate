@@ -119,4 +119,27 @@ describe('Escrow', () => {
             ).to.be.revertedWith("Only the buyer can call this method");
         });
     });
+
+    describe('Inspection', () => {
+        it('Initial inspection status is false', async () => {
+            const result = await escrow.inspectionPassed(1);
+            expect(result).to.be.equal(false);
+        });
+
+        it('Updates inspection status', async () => {
+            const transaction = await escrow.connect(inspector).
+                updateInspectionStatus(1, true);
+            await transaction.wait();
+
+            const result = await escrow.inspectionPassed(1);
+            expect(result).to.be.equal(true);
+        });
+
+        it('Only allows inspector to pass inspection', async () => {
+            expect(
+                escrow.connect(seller).
+                updateInspectionStatus(1, true)
+            ).to.be.revertedWith("Only the inspector can call this method");
+        });
+    });
 })
