@@ -95,4 +95,28 @@ describe('Escrow', () => {
             ).to.be.revertedWith("Only the seller can call this method");
         });
     });
+
+    describe('Deposits', () => {
+        it('Updates contract balance', async () => {
+            const transaction = await escrow.connect(buyer).depositEarnestMoney(1, { value: tokens(5) });
+            await transaction.wait();
+
+            const result = await escrow.getBalance();
+            expect(result).to.be.equal(tokens(5));
+        });
+
+        it('Does not allow too small deposits', async () => {
+            expect(
+                escrow.connect(buyer).
+                    depositEarnestMoney(1, { value: tokens(4) })
+            ).to.be.revertedWith("Deposit amount must be at least 5");
+        });
+
+        it('Only allows buyer to deposit', async () => {
+            expect(
+                escrow.connect(inspector).
+                    depositEarnestMoney(1, { value: tokens(5) })
+            ).to.be.revertedWith("Only the buyer can call this method");
+        });
+    });
 })

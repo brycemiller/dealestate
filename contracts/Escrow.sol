@@ -1,6 +1,8 @@
 //SPDX-License-Identifier: Unlicense
 pragma solidity ^0.8.0;
 
+import "@openzeppelin/contracts/utils/Strings.sol";
+
 interface IERC721 {
     function transferFrom(
         address _from,
@@ -14,6 +16,11 @@ contract Escrow {
     address payable public seller;
     address public inspector;
     address public lender;
+
+    modifier onlyBuyer(uint256 _nftId) {
+        require(msg.sender == buyer[_nftId], "Only the buyer can call this method");
+        _;
+    }
 
     modifier onlySeller() {
         require(msg.sender == seller, "Only the seller can call this method");
@@ -37,6 +44,13 @@ contract Escrow {
         lender = _lender;
     }
 
+    function getBalance() public view returns (uint256) {
+        return address(this).balance;
+    }
+
+    receive() external payable {
+    }
+
     function listProperty(
         uint256 _nftId,
         address _buyer,
@@ -50,5 +64,15 @@ contract Escrow {
         purchasePrice[_nftId] = _purchasePrice;
         escrowAmount[_nftId] = _escrowAmount;
         buyer[_nftId] = _buyer;
+    }
+
+    function depositEarnestMoney(uint256 _nftId) public payable onlyBuyer(_nftId) {
+        require(
+            msg.value >= escrowAmount[_nftId],
+            string.concat(
+                "Deposit amount must be at least ",
+                Strings.toString(escrowAmount[_nftId])
+            )
+        );
     }
 }
