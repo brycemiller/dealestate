@@ -64,12 +64,12 @@ describe('Escrow', () => {
     });
 
     describe('Listing', () => {
-        it('Updates ownership', async () => {
+        it('Updates as listed', async () => {
             const result = await escrow.isListed(1);
             expect(result).to.be.equal(true);
         });
 
-        it('Updates as listed', async () => {
+        it('Updates ownership', async () => {
             expect(await realEstate.ownerOf(1)).to.be.equal(escrow.address);
         });
 
@@ -157,6 +157,158 @@ describe('Escrow', () => {
             expect(await escrow.approval(1, buyer.address)).to.be.equal(true);
             expect(await escrow.approval(1, seller.address)).to.be.equal(true);
             expect(await escrow.approval(1, lender.address)).to.be.equal(true);
+        });
+    });
+
+    describe('Sale', () => {
+        beforeEach(async () => {
+            let transaction = await escrow.connect(buyer).
+                depositEarnestMoney(1, { value: tokens(5) });
+            await transaction.wait();
+
+            transaction = await escrow.connect(inspector).
+                updateInspectionStatus(1, true);
+            await transaction.wait();
+
+            transaction = await escrow.connect(buyer).approveSale(1);
+            await transaction.wait();
+
+            transaction = await escrow.connect(seller).approveSale(1);
+            await transaction.wait();
+
+            transaction = await escrow.connect(lender).approveSale(1);
+            await transaction.wait();
+
+            await lender.sendTransaction(
+                { to: escrow.address, value: tokens(5) }
+            );
+
+            transaction = await escrow.connect(seller).finalizeSale(1);
+            await transaction.wait();
+        });
+
+        it('Updates ownership', async () => {
+            expect(await realEstate.ownerOf(1)).to.be.equal(buyer.address);
+        });
+
+        it('Updates balance', async () => {
+            expect(await escrow.getBalance()).to.be.equal(0);
+        });
+    });
+
+    describe('Cancel sale', () => {
+        beforeEach(async () => {
+            let transaction = await escrow.connect(buyer).
+                depositEarnestMoney(1, { value: tokens(5) });
+            await transaction.wait();
+
+            transaction = await escrow.connect(inspector).
+                updateInspectionStatus(1, true);
+            await transaction.wait();
+
+            transaction = await escrow.connect(buyer).
+                depositEarnestMoney(1, { value: tokens(5) });
+            await transaction.wait();
+        });
+
+        it('Doesn\'t allow canceling approved sales', async () => {
+            // Pass inspection
+            let transaction = await escrow.connect(inspector).
+                updateInspectionStatus(1, true);
+            await transaction.wait();
+
+            transaction = await escrow.connect(buyer).approveSale(1);
+            await transaction.wait();
+
+            transaction = await escrow.connect(seller).approveSale(1);
+            await transaction.wait();
+
+            transaction = await escrow.connect(lender).approveSale(1);
+            await transaction.wait();
+
+            expect(escrow.connect(buyer).cancelSale(1)).to.be.
+                revertedWith("Cannot call this method on approved sales");
+        });
+
+        it('Doesn\'t allow canceling finalized sales', async () => {
+            // Pass inspection
+            let transaction = await escrow.connect(inspector).
+                updateInspectionStatus(1, true);
+            await transaction.wait();
+
+            transaction = await escrow.connect(buyer).approveSale(1);
+            await transaction.wait();
+
+            transaction = await escrow.connect(seller).approveSale(1);
+            await transaction.wait();
+
+            transaction = await escrow.connect(lender).approveSale(1);
+            await transaction.wait();
+
+            await lender.sendTransaction(
+                { to: escrow.address, value: tokens(5) }
+            );
+
+            transaction = await escrow.connect(seller).finalizeSale(1);
+            await transaction.wait();
+
+            expect(escrow.connect(buyer).cancelSale(1)).to.be.
+                revertedWith("Cannot call this method on approved sales");
+        });
+
+        it('Returns earnest money to buyer when inspection not passed', async () => {
+            // Fail inspection
+            let transaction = await escrow.connect(inspector).
+                updateInspectionStatus(1, false);
+            await transaction.wait();
+
+            // Cancel sale
+            transaction = await escrow.connect(buyer).cancelSale(1);
+            await transaction.wait();
+
+            expect(await escrow.getBalance()).to.be.equal(0);
+        });
+
+        it('Forfeits earnest money to seller when inspection passed', async () => {
+            // Pass inspection
+            let transaction = await escrow.connect(inspector).
+                updateInspectionStatus(1, true);
+            await transaction.wait();
+
+            // Cancel sale
+            transaction = await escrow.connect(buyer).cancelSale(1);
+            await transaction.wait();
+
+            expect(await escrow.getBalance()).to.be.equal(0);
+        });
+
+        it('Unlists property', async () => {
+            // Cancel sale
+            transaction = await escrow.connect(buyer).cancelSale(1);
+            await transaction.wait();
+
+            const result = await escrow.isListed(1);
+            expect(result).to.be.equal(false);
+        });
+
+        it('Doesn\'t allow canceling unlisted properties', async () => {
+            // Cancel sale
+            transaction = await escrow.connect(buyer).cancelSale(1);
+            await transaction.wait();
+
+            const result = await escrow.isListed(1);
+            expect(result).to.be.equal(false);
+
+            expect(escrow.connect(buyer).cancelSale(1)).to.be.
+                revertedWith("Cannot call this method on approved sales");
+        });
+
+        it('Updates ownership to seller', async () => {
+            // Cancel sale
+            transaction = await escrow.connect(buyer).cancelSale(1);
+            await transaction.wait();
+
+            expect(await realEstate.ownerOf(1)).to.be.equal(seller.address);
         });
     });
 })
