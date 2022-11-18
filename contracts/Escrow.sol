@@ -32,6 +32,24 @@ contract Escrow {
         _;
     }
 
+    modifier onlyListed(uint256 _nftId) {
+        require(isListed[_nftId], "This method can only be called on listed properties");
+        _;
+    }
+
+    /**
+     * Only sales that have not been approved by all parties can access
+     */
+    modifier onlyNotApproved(uint256 _nftId) {
+        require(
+            (!approval[_nftId][buyer[_nftId]] ||
+            !approval[_nftId][seller] ||
+            !approval[_nftId][lender]),
+            "Cannot call this method on approved sales"
+        );
+        _;
+    }
+
     mapping(uint256 => bool) public isListed;
     mapping(uint256 => uint256) public purchasePrice;
     mapping(uint256 => uint256) public escrowAmount;
@@ -51,13 +69,6 @@ contract Escrow {
         lender = _lender;
     }
 
-    function getBalance() public view returns (uint256) {
-        return address(this).balance;
-    }
-
-    receive() external payable {
-    }
-
     function listProperty(
         uint256 _nftId,
         address _buyer,
@@ -73,7 +84,12 @@ contract Escrow {
         buyer[_nftId] = _buyer;
     }
 
-    function depositEarnestMoney(uint256 _nftId) public payable onlyBuyer(_nftId) {
+    function depositEarnestMoney(uint256 _nftId)
+        public
+        payable
+        onlyListed(_nftId)
+        onlyBuyer(_nftId)
+    {
         require(
             msg.value >= escrowAmount[_nftId],
             string.concat(
@@ -85,12 +101,67 @@ contract Escrow {
 
     function updateInspectionStatus(uint256 _nftId, bool _passed)
         public
+        onlyListed(_nftId)
         onlyInspector
     {
         inspectionPassed[_nftId] = _passed;
     }
 
-    function approveSale(uint256 _nftId) public {
+    function approveSale(uint256 _nftId) public onlyListed(_nftId) {
         approval[_nftId][msg.sender] = true;
+    }
+
+    /**
+     * Require inspection passed
+     * Require sale authorized
+     * Require correct amount of funds
+     * 
+     * Then: Transfer NFT to buyer, funds to seller
+     */
+    function finalizeSale(uint256 _nftId) public onlyListed(_nftId) {
+        require(inspectionPassed[_nftId]);
+        require(approval[_nftId][buyer[_nftId]]);
+        require(approval[_nftId][seller]);
+        require(approval[_nftId][lender]);
+        require(address(this).balance >= purchasePrice[_nftId]);
+
+        isListed[_nftId] = false;
+
+        (bool success, ) = payable(seller).call{ value: address(this).balance}("");
+        require(success);
+
+        // Transfer NFT from this contract to buyer
+        IERC721(nftAddress).transferFrom(address(this), buyer[_nftId], _nftId);
+    }
+
+    /**
+     * Cancel a sale:
+     * Cannot cancel sale if approval has been given by all parties
+     * Cannot cancel sale if property is not listed
+     * If inspection is not passed, then refund earnest money
+     * If inspection is passed, then transfer earnest money to seller
+     */
+    function cancelSale(uint256 _nftId)
+        public
+        onlyListed(_nftId)
+        onlyNotApproved(_nftId)
+    {
+        isListed[_nftId] = false;
+
+        if(inspectionPassed[_nftId] == false) {
+            payable(buyer[_nftId]).transfer(address(this).balance);
+        } else {
+            payable(seller).transfer(address(this).balance);
+        }
+
+        // Transfer NFT from this contract back to seller
+        IERC721(nftAddress).transferFrom(address(this), seller, _nftId);
+    }
+
+    function getBalance() public view returns (uint256) {
+        return address(this).balance;
+    }
+
+    receive() external payable {
     }
 }
