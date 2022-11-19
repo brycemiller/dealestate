@@ -18,7 +18,7 @@ describe('Escrow', () => {
         realEstate = await realEstateContract.deploy();
 
         // Mint NFT as Seller
-        const tokenURI = "https://ipfs.io/ipfs/QmQUozrHLAusXDxrvsESJ3PYB3rUeUuBAvVWw6nop2uu7c/1.png";
+        const tokenURI = "https://ipfs.io/ipfs/QmTudSYeM7mz3PkYEWXWqPjomRPHogcMFSq7XAvsvsgAPS";
         let transaction = await realEstate.connect(seller).mint(tokenURI);
         await transaction.wait();
 
