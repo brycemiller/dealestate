@@ -45,6 +45,9 @@ async function main() {
   );
   await escrow.deployed();
 
+  console.log(`Escrow contract deployed at: ${escrow.address}`);
+  console.log(`Listing 3 properties...`);
+
   for (let i = 0; i < 3; i++) {
     const transaction = await realEstate.connect(seller).approve(escrow.address, i+1);
     await transaction.wait();
